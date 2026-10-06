@@ -26,10 +26,14 @@ public interface ItemRepository extends JpaRepository<Item, Integer> {
 
     long countByUnitIdAndStatus(Integer unitId, String status);
 
-    /** 문항 검색 조건. null 인 파라미터는 조건에서 빠진다. 조건끼리는 AND(BR-01). */
+    /**
+     * 문항 검색 조건. null 인 파라미터는 조건에서 빠진다. 조건끼리는 AND(BR-01).
+     * LIKE 에 {@code escape '\'} 를 적어 레거시처럼 백슬래시를 이스케이프 문자로 둔다({@code search.php:97-98}).
+     * 적지 않으면 Hibernate 가 키워드의 백슬래시를 일반 글자로 바꿔 보낸다.
+     */
     String SEARCH_CONDITION = """
         where i.status = :status
-          and (:keyword is null or i.title like :keyword or i.stem like :keyword)
+          and (:keyword is null or i.title like :keyword escape '\\' or i.stem like :keyword escape '\\')
           and (:unitCode is null or u.code = :unitCode)
           and (:levelEq is null or i.level = :levelEq)
           and (:levelBelow is null or i.level < :levelBelow)

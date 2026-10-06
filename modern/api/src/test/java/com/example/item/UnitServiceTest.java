@@ -1,6 +1,10 @@
 package com.example.item;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -18,6 +22,9 @@ class UnitServiceTest {
 
     @Mock
     private UnitRepository unitRepository;
+
+    @Mock
+    private ItemRepository itemRepository;
 
     @InjectMocks
     private UnitService unitService;
@@ -41,5 +48,61 @@ class UnitServiceTest {
         when(unitRepository.findAllByOrderByGradeAscCodeAsc()).thenReturn(List.of());
 
         assertThat(unitService.listUnits()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("countActiveItemsByUnit: 저장소 순서를 유지하며 단원별 공개 문항 수를 담는다")
+    void countActiveItemsByUnitMapsCountsInOrder() {
+        when(unitRepository.findAllByOrderByGradeAscCodeAsc()).thenReturn(List.of(
+            ItemFixtures.unit(1, "M5-1", "분수의 덧셈과 뺄셈", 5),
+            ItemFixtures.unit(4, "M6-1", "분수의 나눗셈", 6)));
+        when(itemRepository.countByUnitIdAndStatus(1, ItemStatus.ACTIVE)).thenReturn(7L);
+        when(itemRepository.countByUnitIdAndStatus(4, ItemStatus.ACTIVE)).thenReturn(2L);
+
+        List<UnitItemCountResponse> counts = unitService.countActiveItemsByUnit();
+
+        assertThat(counts).containsExactly(
+            new UnitItemCountResponse("M5-1", "분수의 덧셈과 뺄셈", 5, 7L),
+            new UnitItemCountResponse("M6-1", "분수의 나눗셈", 6, 2L));
+    }
+
+    @Test
+    @DisplayName("countActiveItemsByUnit: 문항이 없는 단원도 빠지지 않고 0 으로 나온다")
+    void countActiveItemsByUnitIncludesUnitsWithoutItemsAsZero() {
+        when(unitRepository.findAllByOrderByGradeAscCodeAsc()).thenReturn(List.of(
+            ItemFixtures.unit(1, "M5-1", "분수의 덧셈과 뺄셈", 5),
+            ItemFixtures.unit(3, "M5-3", "소수의 곱셈", 5)));
+        when(itemRepository.countByUnitIdAndStatus(1, ItemStatus.ACTIVE)).thenReturn(3L);
+        when(itemRepository.countByUnitIdAndStatus(3, ItemStatus.ACTIVE)).thenReturn(0L);
+
+        List<UnitItemCountResponse> counts = unitService.countActiveItemsByUnit();
+
+        assertThat(counts).extracting(UnitItemCountResponse::code).containsExactly("M5-1", "M5-3");
+        assertThat(counts).extracting(UnitItemCountResponse::activeItemCount).containsExactly(3L, 0L);
+    }
+
+    @Test
+    @DisplayName("countActiveItemsByUnit: status='A' 로만 저장소에 묻는다(검수 중 · 삭제는 세지 않는다)")
+    void countActiveItemsByUnitQueriesActiveStatusOnly() {
+        when(unitRepository.findAllByOrderByGradeAscCodeAsc()).thenReturn(List.of(
+            ItemFixtures.unit(1, "M5-1", "분수의 덧셈과 뺄셈", 5)));
+        when(itemRepository.countByUnitIdAndStatus(1, ItemStatus.ACTIVE)).thenReturn(4L);
+
+        List<UnitItemCountResponse> counts = unitService.countActiveItemsByUnit();
+
+        assertThat(counts).extracting(UnitItemCountResponse::activeItemCount).containsExactly(4L);
+        verify(itemRepository).countByUnitIdAndStatus(1, "A");
+        verify(itemRepository, never()).countByUnitIdAndStatus(1, ItemStatus.REVIEWING);
+        verify(itemRepository, never()).countByUnitIdAndStatus(1, ItemStatus.DELETED);
+        verifyNoMoreInteractions(itemRepository);
+    }
+
+    @Test
+    @DisplayName("countActiveItemsByUnit: 단원이 없으면 빈 목록, 문항 수는 묻지 않는다")
+    void countActiveItemsByUnitEmpty() {
+        when(unitRepository.findAllByOrderByGradeAscCodeAsc()).thenReturn(List.of());
+
+        assertThat(unitService.countActiveItemsByUnit()).isEmpty();
+        verifyNoInteractions(itemRepository);
     }
 }

@@ -28,6 +28,8 @@ class ItemSearchRepositoryTest {
     private static final int LEVEL_UPPER_BOUND = 5;
     private static final int PAGE_SIZE = 20;
     private static final int SMALL_PAGE_SIZE = 2;
+    private static final int FRACTION_UNIT_ID = 1;
+    private static final int EXTRA_ITEM_LEVEL = 2;
 
     @Autowired
     private TestEntityManager entityManager;
@@ -133,5 +135,77 @@ class ItemSearchRepositoryTest {
         assertThat(page.getContent()).hasSizeGreaterThan(1);
         assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
         assertThat(page.getContent().get(0).getTags()).extracting(Tag::getName).containsExactly("문장제");
+    }
+
+    /** 공개 문항을 하나 더 넣는다. 단원은 seed() 가 넣은 M5-1. */
+    private void persistActiveItem(String title, String stem) {
+        Unit fraction = entityManager.find(Unit.class, FRACTION_UNIT_ID);
+        entityManager.persist(new Item(fraction, title, stem, EXTRA_ITEM_LEVEL, ItemStatus.ACTIVE,
+            ItemFixtures.SEED_TIME));
+        entityManager.flush();
+        entityManager.clear();
+    }
+
+    /** {@code ItemSearchService.resolveKeyword} 와 같은 방식으로 키워드를 LIKE 패턴으로 만든다. */
+    private static String likePattern(String keyword) {
+        return "%" + keyword + "%";
+    }
+
+    @Test
+    @DisplayName("키워드 \\% 는 와일드카드가 아니라 글자 % 가 들어 있는 문항만 찾는다(search.php:97-98)")
+    void backslashPercentMatchesLiteralPercentOnly() {
+        persistActiveItem("할인율 50% 구하기", "할인율 문제 본문");
+        persistActiveItem("할인율 50 구하기", "할인율 문제 본문");
+
+        Page<Item> page = search(likePattern("\\%"), null, null, null, null, firstPage());
+
+        assertThat(page.getContent()).extracting(Item::getTitle).containsExactly("할인율 50% 구하기");
+        assertThat(page.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("키워드 \\_ 는 와일드카드가 아니라 글자 _ 가 들어 있는 문항만 찾는다(search.php:97-98)")
+    void backslashUnderscoreMatchesLiteralUnderscoreOnly() {
+        persistActiveItem("빈칸 _ 채우기", "빈칸 문제 본문");
+        persistActiveItem("빈칸 채우기", "빈칸 문제 본문");
+
+        Page<Item> page = search(likePattern("\\_"), null, null, null, null, firstPage());
+
+        assertThat(page.getContent()).extracting(Item::getTitle).containsExactly("빈칸 _ 채우기");
+        assertThat(page.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("이스케이프하지 않은 _ 는 그대로 한 글자 와일드카드, \\_ 로 쓰면 글자 _ 만 맞는다")
+    void unescapedUnderscoreStaysWildcard() {
+        persistActiveItem("할인율 50% 구하기", "할인율 문제 본문");
+
+        assertThat(search(likePattern("50_ 구"), null, null, null, null, firstPage()).getContent())
+            .extracting(Item::getTitle).containsExactly("할인율 50% 구하기");
+        assertThat(search(likePattern("50\\_ 구"), null, null, null, null, firstPage()).getTotalElements()).isZero();
+    }
+
+    @Test
+    @DisplayName("지문 LIKE 에도 이스케이프가 적용된다: \\% 는 지문의 글자 % 만 찾는다")
+    void backslashPercentMatchesLiteralPercentInStem() {
+        persistActiveItem("백분율 문제", "전체의 30% 는 얼마인가");
+        persistActiveItem("백분율 연습", "전체의 30 은 얼마인가");
+
+        Page<Item> page = search(likePattern("30\\%"), null, null, null, null, firstPage());
+
+        assertThat(page.getContent()).extracting(Item::getTitle).containsExactly("백분율 문제");
+        assertThat(page.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("키워드 \\\\ 는 글자 \\ 가 들어 있는 문항만 찾는다")
+    void doubleBackslashMatchesLiteralBackslashOnly() {
+        persistActiveItem("경로 a\\b 표기", "경로 문제 본문");
+        persistActiveItem("경로 ab 표기", "경로 문제 본문");
+
+        Page<Item> page = search(likePattern("\\\\"), null, null, null, null, firstPage());
+
+        assertThat(page.getContent()).extracting(Item::getTitle).containsExactly("경로 a\\b 표기");
+        assertThat(page.getTotalElements()).isEqualTo(1);
     }
 }
