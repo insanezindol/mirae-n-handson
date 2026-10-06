@@ -15,6 +15,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import org.hibernate.annotations.BatchSize;
 
 /**
  * 문항. 테이블 {@code item}. 태그는 조인 테이블 {@code item_tag(item_id, tag_id)} 로 잇는다.
@@ -22,6 +23,9 @@ import java.util.List;
 @Entity
 @Table(name = "item")
 public class Item {
+
+    /** 태그 지연 로딩 묶음 크기. 문항 검색 한 페이지({@code ItemSearchService.PAGE_SIZE})와 같다. */
+    static final int TAG_BATCH_SIZE = 20;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -57,6 +61,7 @@ public class Item {
         joinColumns = @JoinColumn(name = "item_id"),
         inverseJoinColumns = @JoinColumn(name = "tag_id"))
     @OrderBy("id ASC")
+    @BatchSize(size = TAG_BATCH_SIZE)
     private List<Tag> tags = new ArrayList<>();
 
     protected Item() {

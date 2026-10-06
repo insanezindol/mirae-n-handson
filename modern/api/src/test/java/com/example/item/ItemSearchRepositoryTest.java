@@ -2,6 +2,8 @@ package com.example.item;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -115,5 +117,21 @@ class ItemSearchRepositoryTest {
 
         assertThat(page.getContent()).isEmpty();
         assertThat(page.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("한 페이지의 태그는 행마다가 아니라 쿼리 한 번으로 묶어 가져온다")
+    void loadsTagsOfAPageInOneBatch() {
+        Page<Item> page = search(null, null, null, null, null, firstPage());
+        Statistics statistics = entityManager.getEntityManager().getEntityManagerFactory()
+            .unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+
+        page.getContent().forEach(item -> item.getTags().size());
+
+        assertThat(page.getContent()).hasSizeGreaterThan(1);
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+        assertThat(page.getContent().get(0).getTags()).extracting(Tag::getName).containsExactly("문장제");
     }
 }

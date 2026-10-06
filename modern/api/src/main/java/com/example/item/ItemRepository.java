@@ -40,6 +40,7 @@ public interface ItemRepository extends JpaRepository<Item, Integer> {
     /**
      * 문항 검색(레거시 {@code search.php}). 단원 코드 · 태그 이름 비교와 정렬은 DB 콜레이션을 따르도록 SQL 안에서 한다.
      * 태그는 페이지 조회 뒤 트랜잭션 안에서 지연 로딩한다(컬렉션 fetch join 은 메모리 페이징이 되므로 쓰지 않는다).
+     * 지연 로딩은 {@code Item.tags} 의 {@code @BatchSize} 로 한 페이지를 한 번에 묶어 가져온다.
      */
     @Query(
         value = "select i from Item i join fetch i.unit u " + SEARCH_CONDITION,
