@@ -1,0 +1,35 @@
+name: Claude Implement From Label
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  implement:
+    if: github.event.label.name == 'claude-implement'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            ISSUE NUMBER: ${{ github.event.issue.number }}
+
+            Read the issue with `gh issue view`. Implement only what the issue asks for.
+            Add or update tests. Run `./gradlew test` in the modern/api directory and make sure it passes.
+            Create a new branch, commit, push, and open a DRAFT pull request that references the issue.
+            Follow docs/approval-checklist.md. Write the PR description in Korean.
+
+          claude_args: |
+            --max-turns 30
+            --allowedTools "Read,Edit,Bash(gh issue view:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(./gradlew test:*)"
